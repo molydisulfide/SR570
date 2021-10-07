@@ -216,60 +216,7 @@ def log_data_NI(NI_reader_wrapper, NI_logFile, stopLogging):
         NI_logFile.file_writer(data)
     logging.info('\t\t\t\tLogging done because end of stop logging flag.')
     
-    
-def plot_data_NI(NI_reader_wrapper, stopLogging):    
-    while not stopLogging.isSet():
-        NI_reader_wrapper.read()
-        data = NI_reader_wrapper.get_data()
-        plt.ion();
-    #plt.show();
-
-        fig, (ax1, ax2) = plt.subplots(2 ,1, figsize=(12,8))
-        fig.subplots_adjust(hspace = 1)
-
-
-        ax1.set_title('Current-Time Trace', fontsize = 15, fontname = 'Consolas')
-        ax1.set_ylabel('Current [nA]', fontsize = 12, fontname = 'Consolas')
-        ax1.set_xlabel('Time [x]', fontsize = 12, fontname = 'Consolas')
-        ax1.grid('on')
-        plt.xticks(fontname = 'Consolas')
-        plt.yticks(fontname = 'Consolas')
-        plt.setp(ax1.get_xticklabels(), visible = True, fontsize = 12)
-        plt.setp(ax1.get_yticklabels(), visible = True, fontsize = 12)
-
-
-        ax2.set_title('Live FFT', fontsize = 15, fontname = 'Consolas')
-        ax2.set_ylabel('Power', fontsize = 12, fontname = 'Consolas')
-        ax2.set_xlabel('Frequency [Hz]', fontsize = 12, fontname = 'Consolas')
-        ax2.grid('on')
-        ax2.set_xscale('log')
-        ax2.set_yscale('log')
-        plt.xticks(fontname = 'Consolas')
-        plt.yticks(fontname = 'Consolas')
-        plt.setp(ax2.get_xticklabels(), visible = True, fontsize = 12)
-        plt.setp(ax2.get_yticklabels(), visible = True, fontsize = 12)
-
-        
-        #fft_data = np.fft.fft(data)
-        #abs_fft_data = np.absolute(fft_data)
-        #fft_freq = np.fft.fftfreq(len(abs_fft_data))
-        
-        ln1, = ax1.plot(data[0], data[1],'-', color = 'seagreen', lw = 2, alpha = 0.8)
-        ln2, = ax2.plot(data[0], data[1], '-', color = 'steelblue', lw = 2, alpha = 0.8)
-        
-        plt.pause(0.01);
-        ax1.relim()
-        ax1.autoscale_view()
-        ax2.relim()
-        ax2.autoscale_view()
-      
-        fig.canvas.draw()
-        fig.canvas.flush_events()
-        
-        if time.time() > timeout:
-            break
-            
-    
+           
 def get_NI_config(rc):
     config1 = NI_config(
         channelIdent ="Dev3/ai0", 
@@ -329,13 +276,6 @@ def main():
         name = 'NI_printer_thread',
         daemon = True)
     printerProcess.start()
-    
-    plottingProcess = threading.Thread(
-        target = plot_data_NI, 
-        args = (r,stopLogging), 
-        name = 'NI_printer_thread',
-        daemon = True)
-    plottingProcess.start()
 
     
     time.sleep(10)
@@ -345,6 +285,6 @@ def main():
     t.unload()
    
 
-#if __name__ == "main":
-main()
+if __name__ == "main":
+    main()
     

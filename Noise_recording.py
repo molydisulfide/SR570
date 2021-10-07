@@ -89,6 +89,7 @@ import serial
 import threading
 import sys
 import logging
+import pathlib
 logging.basicConfig(level=logging.INFO)
 
 import argparse
@@ -143,96 +144,152 @@ def run_single(args, amps, scope, rc):
     chan1, chan2 = read_a_pair(scope, sweep, rc)
     
 ## The main goodies run here,
-if __name__ == '__main__':
-    scope = scope_utils.set_up_scope(rc)
-    #scope = scope_utils.set_up_scope(rc)
-    #BUG? OK, this is dumb, but the main loop does not run unless you probe each scope channel first with a timeout error on the read.  Not sure if the initial read is way slow or something.
-    logging.info('Startup gimmicks.')
-    result1=scope.query(":MEASure:VAVerage? DISPlay, CHANnel" + rc['voltageChannel'])
-    logging.info("Measure source1: %s" % result1)
-    result2=scope.query(":MEASure:VAVerage? DISPlay, CHANnel" + rc['currentChannel'])
-    logging.info("Measure source2: %s" % result2)
-    logging.info('Startup gimmicks complete.')
-    try:
-        amps = scope_utils.find_amps(1, ['COM1'])
-    except serial.serialutil.SerialException:
-        handle_serial_fail(amps)
+#if __name__ == '__main__':
 
-    # initialize NI
-    niFile = scope_utils.get_filename(datetime.datetime.now(), rc)
-    niFile = niFile.parent / (niFile.stem + '_NIlogger.csv')
-    
-    try:
-        d, t, r = ni_utils.initialize_NI(ni_utils.get_NI_config(rc))
-        f = ni_utils.NI_logFile(niFile, t.currentTask.config)
-        p = ni_utils.NI_single_reader_wrapper(t)
-    except Exception as e:
-        logging.warning(e)
-        logging.warning('Failed creating nidaqtask.  Resetting instrument and retrying.')
-        d = ni_utils.NI_device(ni_utils.get_NI_config(rc))
-        d.reset_NI()
-        d, t, r = ni_utils.initialize_NI(ni_utils.get_NI_config(rc))
-        f = ni_utils.NI_logFile(niFile, t.currentTask.config)
-        p = ni_utils.NI_single_reader_wrapper(t)
+try:
+    amps = scope_utils.find_amps(1, ['COM1'])
+except serial.serialutil.SerialException:
+    handle_serial_fail(amps)
 
-    stopLogging = threading.Event()
-    printOut = threading.Event()
-    
-    loggerThread = threading.Thread(
-        target = ni_utils.log_data_NI, 
-        args= (r,f,stopLogging))
+# initialize NI
+fileName = pathlib.Path.cwd()
+runtime = datetime.datetime.now()
+fileStr = 'I-t_Trace_' + str(runtime.date().strftime('%d%m%Y'))+'_'+str(runtime.strftime("%H%M")) + '.csv'
+fileName =  fileName / fileStr
+niFile = fileName
+#niFile = niFile.parent / (niFile.stem + '_NIlogger.csv')
 
-    printerThread = threading.Thread(
-            target = ni_utils.display_data_NI, 
-            args = (p,stopLogging,printOut,rc['niPrintInterval']), 
-            name = 'NI_printer_thread')
-    
-    plottingThread = threading.Thread(
-            target = ni_utils.plot_data_NI,
-            args = (r, stopLogging))
-    
-    sens = sens_lut[rc['sens']]
+try:
+    d, t, r = ni_utils.initialize_NI(ni_utils.get_NI_config(rc))
+    f = ni_utils.NI_logFile(niFile, t.currentTask.config)
+    p = ni_utils.NI_single_reader_wrapper(t)
+except Exception as e:
+    logging.warning(e)
+    logging.warning('Failed creating nidaqtask.  Resetting instrument and retrying.')
+    d = ni_utils.NI_device(ni_utils.get_NI_config(rc))
+    d.reset_NI()
+    d, t, r = ni_utils.initialize_NI(ni_utils.get_NI_config(rc))
+    f = ni_utils.NI_logFile(niFile, t.currentTask.config)
+    p = ni_utils.NI_single_reader_wrapper(t)
+print('hello1')
+stopLogging = threading.Event()
+printOut = threading.Event()
 
-    try:
-        if args.init:
-            logging.info(' Setting up SR570 \t...')
-            run_init(amps, sens)
-            logging.info(' Setup of SR570 \t DONE')
-            time.sleep(2)
-        elif args.single:
-            loggerThread.start()
-            f.set_start_time(datetime.datetime.now())
-            printerThread.start()
-            try: 
-                run_single(args, amps, scope, rc)
-            except serial.serialutil.SerialException:
-                amps = handle_serial_fail(amps)
-                run_single(args, amps, scope, rc)
-    
-    
-    except KeyboardInterrupt:
-        logging.info('  interrupted the programm via key board - will try to shutdown cleanly')
-        stopLogging.set()  # inform the child thread that it should exit
-        t.unload()
-        scope_utils.close_amps(amps)
-        sys.exit(1)
+loggerThread = threading.Thread(
+    target = ni_utils.log_data_NI, 
+    args= (r,f,stopLogging))
+loggerThread.start()
+#    printerThread = threading.Thread(
+#            target = ni_utils.display_data_NI, 
+#            args = (p,stopLogging,printOut,rc['niPrintInterval']), 
+#            name = 'NI_printer_thread')
 
-    stopLogging.set()
-    
-    ## Wrap things up
-    scope_utils.close_amps(amps)
 
-    # close ni logger
-    t.unload()
+sens = sens_lut[rc['sens']]
+
+#    try:
+#        if args.init:
+#            logging.info(' Setting up SR570 \t...')
+#            run_init(amps, sens)
+#            logging.info(' Setup of SR570 \t DONE')
+#            time.sleep(2)
+#        elif args.single:
+#            loggerThread.start()
+#            f.set_start_time(datetime.datetime.now())
+#            printerThread.start()
+#            try: 
+#                run_single(args, amps, scope, rc)
+#            except serial.serialutil.SerialException:
+#                amps = handle_serial_fail(amps)
+#                run_single(args, amps, scope, rc)
+plt.ion();
+#plt.show();
+
+fig, (ax1, ax2) = plt.subplots(2 ,1, figsize=(12,8))
+fig.subplots_adjust(hspace = 1)
+
+
+ax1.set_title('Current-Time Trace', fontsize = 15, fontname = 'Consolas')
+ax1.set_ylabel('Current [nA]', fontsize = 12, fontname = 'Consolas')
+ax1.set_xlabel('Time [x]', fontsize = 12, fontname = 'Consolas')
+ax1.grid('on')
+plt.xticks(fontname = 'Consolas')
+plt.yticks(fontname = 'Consolas')
+plt.setp(ax1.get_xticklabels(), visible = True, fontsize = 12)
+plt.setp(ax1.get_yticklabels(), visible = True, fontsize = 12)
+
+#print('hello2')
+ax2.set_title('Live FFT', fontsize = 15, fontname = 'Consolas')
+ax2.set_ylabel('Power', fontsize = 12, fontname = 'Consolas')
+ax2.set_xlabel('Frequency [Hz]', fontsize = 12, fontname = 'Consolas')
+ax2.grid('on')
+ax2.set_xscale('log')
+ax2.set_yscale('log')
+plt.xticks(fontname = 'Consolas')
+plt.yticks(fontname = 'Consolas')
+plt.setp(ax2.get_xticklabels(), visible = True, fontsize = 12)
+plt.setp(ax2.get_yticklabels(), visible = True, fontsize = 12)
+
+i = 0
+x_data = []
+y_data = []
+time_data = []
+
+ln1, = ax1.plot(time_data, x_data,'-', color = 'seagreen', lw = 2, alpha = 0.8)
+ln2, = ax2.plot(time_data, y_data, '-', color = 'steelblue', lw = 2, alpha = 0.8)
+while i<50:
+    p.read()
+    data = p.get_data()
+    x_data.append(data[0])
+    y_data.append(data[1])
+    time_data.append(i)
+    print(data)
+    #fft_data = np.fft.fft(data)
+    #abs_fft_data = np.absolute(fft_data)
+    #fft_freq = np.fft.fftfreq(len(abs_fft_data))
+    
+    ln1.set_xdata(time_data)
+    ln1.set_ydata(x_data)
+    ln2.set_xdata(time_data)
+    ln2.set_ydata(y_data)
+    i = i+1
+    plt.pause(0.001);
+    ax1.relim()
+    ax1.autoscale_view()
+    ax2.relim()
+    ax2.autoscale_view()
+    fig.canvas.draw()
+    fig.canvas.flush_events()
+   # time.sleep(0.5)
+        
+            
+            
+            
+
+
+#    except KeyboardInterrupt:
+#        logging.info('  interrupted the programm via key board - will try to shutdown cleanly')
+#        stopLogging.set()  # inform the child thread that it should exit
+#        t.unload()
+#        scope_utils.close_amps(amps)
+#        sys.exit(1)
+
+stopLogging.set()
+
+## Wrap things up
+scope_utils.close_amps(amps)
+
+# close ni logger
+t.unload()
+logging.info('NI logging should be finished correctly')
+
+# BUG Maybe you might need a t.task.close() here, but figure out what the difference is here.
+try:
+    t.task.close()
+except:
     logging.info('NI logging should be finished correctly')
-    
-    # BUG Maybe you might need a t.task.close() here, but figure out what the difference is here.
-    try:
-        t.task.close()
-    except:
-        logging.info('NI logging should be finished correctly')
 
-    logging.info('Run finished.')
+logging.info('Run finished.')
 # =============================================================================
 
 # =============================================================================
